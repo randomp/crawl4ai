@@ -6,6 +6,7 @@ It automatically detects the file format, finds columns containing WeChat URLs, 
 and returns deduplicated results with parsing statistics.
 """
 
+import os
 import pandas as pd
 from typing import Dict, List, Set
 from urllib.parse import urlparse
@@ -13,6 +14,10 @@ import logging
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+# Security constants
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB limit
+UPLOAD_DIR = Path(os.getenv('UPLOAD_DIR', '/tmp/uploads')).resolve()
 
 
 def validate_wechat_url(url: str) -> bool:
@@ -46,7 +51,7 @@ def validate_wechat_url(url: str) -> bool:
         return False
 
 
-async def parse_wechat_file(file_path: str) -> Dict:
+def parse_wechat_file(file_path: str) -> Dict:
     """
     Parse an Excel or CSV file containing WeChat article URLs.
 
@@ -70,18 +75,30 @@ async def parse_wechat_file(file_path: str) -> Dict:
 
     Raises:
         FileNotFoundError: If the file doesn't exist
-        ValueError: If the file format is not supported
+        ValueError: If the file format is not supported, path is invalid, or file is too large
 
     Examples:
-        >>> result = await parse_wechat_file("articles.xlsx")
+        >>> result = parse_wechat_file("articles.xlsx")
         >>> print(f"Found {result['unique_urls']} unique URLs")
     """
     try:
-        file_path_obj = Path(file_path)
+        # Security: Path traversal protection
+        file_path_obj = Path(file_path).resolve()
+
+        # Validate path is within allowed upload directory
+        try:
+            file_path_obj.relative_to(UPLOAD_DIR)
+        except ValueError:
+            raise ValueError(f"Invalid file path: must be within upload directory")
 
         # Check if file exists
         if not file_path_obj.exists():
             raise FileNotFoundError(f"File not found: {file_path}")
+
+        # Security: File size validation to prevent DoS
+        file_size = file_path_obj.stat().st_size
+        if file_size > MAX_FILE_SIZE:
+            raise ValueError(f"File too large. Maximum size: {MAX_FILE_SIZE} bytes ({MAX_FILE_SIZE // (1024*1024)}MB)")
 
         # Detect file format and read file
         file_extension = file_path_obj.suffix.lower()
@@ -103,11 +120,14 @@ async def parse_wechat_file(file_path: str) -> Dict:
         url_columns: Set[str] = set()
 
         for column in df.columns:
-            # Convert column to string and iterate through values
-            for value in df[column].astype(str):
-                # Skip NaN and empty strings
-                if value in ['nan', '', None]:
+            # Iterate through values in the column
+            for value in df[column]:
+                # Skip NaN and empty strings using proper pandas NaN detection
+                if pd.isna(value) or str(value).strip() == '':
                     continue
+
+                # Convert to string for URL checking
+                value = str(value)
 
                 # Check if the value looks like a URL (contains http)
                 if 'http' in value.lower():
@@ -134,6 +154,6 @@ async def parse_wechat_file(file_path: str) -> Dict:
 
         return result
 
-    except Exception as e:
-        logger.error(f"Error parsing file: {e}")
+    except (FileNotFoundError, pd.errors.ParserError, ValueError) as e:
+        logger.error(f"Failed to parse file: {e}")
         raise

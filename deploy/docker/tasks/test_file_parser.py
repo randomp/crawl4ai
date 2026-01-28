@@ -35,8 +35,7 @@ def test_validate_wechat_url():
     assert validate_wechat_url("https://mp.weixin.qq.com/") is False  # Missing /s path
 
 
-@pytest.mark.asyncio
-async def test_parse_excel_file():
+def test_parse_excel_file():
     """Test parsing Excel file containing WeChat URLs."""
     # Create temporary Excel file
     with tempfile.NamedTemporaryFile(mode='w', suffix='.xlsx', delete=False) as tmp:
@@ -59,7 +58,7 @@ async def test_parse_excel_file():
         df.to_excel(tmp_path, index=False)
 
         # Parse the file
-        result = await parse_wechat_file(tmp_path)
+        result = parse_wechat_file(tmp_path)
 
         # Assertions
         assert result['total_rows'] == 4
@@ -76,8 +75,7 @@ async def test_parse_excel_file():
             os.unlink(tmp_path)
 
 
-@pytest.mark.asyncio
-async def test_parse_csv_file():
+def test_parse_csv_file():
     """Test parsing CSV file containing WeChat URLs."""
     # Create temporary CSV file
     with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False, newline='') as tmp:
@@ -101,7 +99,7 @@ async def test_parse_csv_file():
         df.to_csv(tmp_path, index=False)
 
         # Parse the file
-        result = await parse_wechat_file(tmp_path)
+        result = parse_wechat_file(tmp_path)
 
         # Assertions
         assert result['total_rows'] == 5
@@ -119,15 +117,13 @@ async def test_parse_csv_file():
             os.unlink(tmp_path)
 
 
-@pytest.mark.asyncio
-async def test_parse_nonexistent_file():
+def test_parse_nonexistent_file():
     """Test parsing a file that doesn't exist."""
     with pytest.raises(FileNotFoundError):
-        await parse_wechat_file('/nonexistent/path/file.xlsx')
+        parse_wechat_file('/nonexistent/path/file.xlsx')
 
 
-@pytest.mark.asyncio
-async def test_parse_unsupported_format():
+def test_parse_unsupported_format():
     """Test parsing a file with unsupported format."""
     # Create temporary .txt file
     with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as tmp:
@@ -136,7 +132,7 @@ async def test_parse_unsupported_format():
 
     try:
         with pytest.raises(ValueError, match="Unsupported file format"):
-            await parse_wechat_file(tmp_path)
+            parse_wechat_file(tmp_path)
 
     finally:
         if os.path.exists(tmp_path):
