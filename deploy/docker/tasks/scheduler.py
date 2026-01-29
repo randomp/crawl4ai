@@ -92,6 +92,10 @@ async def execute_task(task_id: int):
 
     Args:
         task_id: ID of task to execute
+
+    Note:
+        Crawler is obtained from shared pool and should NOT be closed.
+        Pool manages crawler lifecycle via janitor process.
     """
     logger.info(f"Starting execution for task {task_id}")
 
@@ -133,7 +137,7 @@ async def execute_task(task_id: int):
             user_agent=crawl_config.get('user_agent')
         )
 
-        # Get crawler from pool
+        # Get crawler from pool (shared resource, do not close)
         try:
             crawler = await crawler_pool.get_crawler(browser_config)
         except Exception as e:
@@ -197,12 +201,8 @@ async def execute_task(task_id: int):
                 db.rollback()
 
     finally:
-        # Close database session
+        # Close database session properly
         db.close()
-        try:
-            next(db_generator)
-        except StopIteration:
-            pass
 
 
 def calculate_next_run(task: Task) -> Optional[datetime]:
@@ -366,10 +366,6 @@ async def schedule_task(task: Task, scheduler: AsyncIOScheduler):
             db.commit()
         finally:
             db.close()
-            try:
-                next(db_generator)
-            except StopIteration:
-                pass
 
         logger.info(f"Scheduled task {task.id} with job ID {job_id}")
     else:
@@ -401,10 +397,6 @@ async def unschedule_task(task_id: int, scheduler: AsyncIOScheduler):
                 db.commit()
         finally:
             db.close()
-            try:
-                next(db_generator)
-            except StopIteration:
-                pass
     else:
         logger.warning(f"No job found for task {task_id}")
 
@@ -438,10 +430,6 @@ async def start_scheduler():
 
     finally:
         db.close()
-        try:
-            next(db_generator)
-        except StopIteration:
-            pass
 
 
 async def stop_scheduler():
