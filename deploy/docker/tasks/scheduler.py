@@ -28,9 +28,13 @@ logger = logging.getLogger(__name__)
 _scheduler: Optional[AsyncIOScheduler] = None
 
 
-def create_scheduler() -> AsyncIOScheduler:
+def create_scheduler(database_url: str, timezone: str = 'Asia/Shanghai') -> AsyncIOScheduler:
     """
     Create and configure APScheduler instance with PostgreSQL job store
+
+    Args:
+        database_url: Database connection URL for job store
+        timezone: Timezone for scheduler (default: 'Asia/Shanghai')
 
     Returns:
         Configured AsyncIOScheduler instance
@@ -39,9 +43,6 @@ def create_scheduler() -> AsyncIOScheduler:
 
     if _scheduler is not None:
         return _scheduler
-
-    # Get database URL for job store
-    database_url = get_database_url()
 
     # Configure job stores
     jobstores = {
@@ -59,7 +60,7 @@ def create_scheduler() -> AsyncIOScheduler:
     _scheduler = AsyncIOScheduler(
         jobstores=jobstores,
         job_defaults=job_defaults,
-        timezone='UTC'
+        timezone=timezone
     )
 
     logger.info("Created APScheduler instance with PostgreSQL job store")
@@ -74,7 +75,7 @@ def get_scheduler() -> AsyncIOScheduler:
         AsyncIOScheduler instance
     """
     if _scheduler is None:
-        return create_scheduler()
+        return create_scheduler(get_database_url())
     return _scheduler
 
 
@@ -265,7 +266,7 @@ def calculate_next_run(task: Task) -> Optional[datetime]:
     return None
 
 
-async def schedule_task(task: Task):
+async def schedule_task(task: Task, scheduler: AsyncIOScheduler):
     """
     Add or update task in scheduler
 
@@ -276,8 +277,8 @@ async def schedule_task(task: Task):
 
     Args:
         task: Task to schedule
+        scheduler: AsyncIOScheduler instance to use
     """
-    scheduler = get_scheduler()
 
     # Skip if task is not active or has no schedule
     if task.status != 'active':
@@ -375,14 +376,14 @@ async def schedule_task(task: Task):
         logger.warning(f"Failed to create trigger for task {task.id}")
 
 
-async def unschedule_task(task_id: int):
+async def unschedule_task(task_id: int, scheduler: AsyncIOScheduler):
     """
     Remove task from scheduler
 
     Args:
         task_id: ID of task to unschedule
+        scheduler: AsyncIOScheduler instance to use
     """
-    scheduler = get_scheduler()
     job_id = f"task-{task_id}"
 
     if scheduler.get_job(job_id):
@@ -429,7 +430,7 @@ async def start_scheduler():
 
         for task in tasks:
             try:
-                await schedule_task(task)
+                await schedule_task(task, scheduler)
             except Exception as e:
                 logger.error(f"Failed to schedule task {task.id}: {e}")
 
