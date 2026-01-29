@@ -8,7 +8,7 @@ Includes endpoints for task CRUD, file upload, execution control, and data expor
 import asyncio
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -16,14 +16,14 @@ from fastapi import (
     APIRouter, Depends, File, HTTPException, Query, UploadFile
 )
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from .models import (
     Task, TaskExecution, Article,
     get_db, get_task
 )
-from .file_parser import parse_wechat_file, UPLOAD_DIR
+from .file_parser import parse_wechat_file, UPLOAD_DIR, MAX_FILE_SIZE
 from .scheduler import schedule_task, unschedule_task, execute_task
 from .exporter import export_articles
 
@@ -39,12 +39,13 @@ class TaskCreate(BaseModel):
     """Model for creating a new task"""
     name: str = Field(..., min_length=1, max_length=255, description="Task name")
     description: Optional[str] = Field(None, description="Task description")
-    schedule_type: str = Field(..., regex="^(once|interval|cron)$", description="Schedule type")
+    schedule_type: str = Field(..., pattern="^(once|interval|cron)$", description="Schedule type")
     schedule_config: Dict = Field(..., description="Schedule configuration")
     wechat_urls: List[str] = Field(..., min_items=1, description="List of WeChat URLs to crawl")
     crawl_config: Optional[Dict] = Field(default_factory=dict, description="Crawler configuration")
 
-    @validator('wechat_urls')
+    @field_validator('wechat_urls')
+    @classmethod
     def validate_wechat_urls(cls, urls):
         """Validate that all URLs are WeChat URLs"""
         for url in urls:
@@ -57,12 +58,13 @@ class TaskUpdate(BaseModel):
     """Model for updating an existing task"""
     name: Optional[str] = Field(None, min_length=1, max_length=255)
     description: Optional[str] = None
-    schedule_type: Optional[str] = Field(None, regex="^(once|interval|cron)$")
+    schedule_type: Optional[str] = Field(None, pattern="^(once|interval|cron)$")
     schedule_config: Optional[Dict] = None
     wechat_urls: Optional[List[str]] = None
     crawl_config: Optional[Dict] = None
 
-    @validator('wechat_urls')
+    @field_validator('wechat_urls')
+    @classmethod
     def validate_wechat_urls(cls, urls):
         """Validate that all URLs are WeChat URLs"""
         if urls is not None:
@@ -74,7 +76,7 @@ class TaskUpdate(BaseModel):
 
 class TaskStatusUpdate(BaseModel):
     """Model for updating task status"""
-    status: str = Field(..., regex="^(active|paused|deleted)$", description="New task status")
+    status: str = Field(..., pattern="^(active|paused|deleted)$", description="New task status")
 
 
 class FileUploadResponse(BaseModel):
@@ -137,9 +139,21 @@ async def upload_file(file: UploadFile = File(...)):
         file_path = UPLOAD_DIR / file.filename
 
         try:
+            # Read file content
+            content = await file.read()
+
+            # Validate file size before writing
+            if len(content) > MAX_FILE_SIZE:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"File too large. Maximum size: {MAX_FILE_SIZE // (1024*1024)}MB"
+                )
+
+            # Write to disk
             with open(file_path, 'wb') as f:
-                content = await file.read()
                 f.write(content)
+        except HTTPException:
+            raise
         except Exception as e:
             logger.error(f"Failed to save uploaded file: {e}")
             raise HTTPException(status_code=500, detail="Failed to save uploaded file")
@@ -149,6 +163,13 @@ async def upload_file(file: UploadFile = File(...)):
             result = parse_wechat_file(str(file_path))
         except Exception as e:
             logger.error(f"Failed to parse file {file.filename}: {e}")
+            # Clean up uploaded file on parse failure
+            try:
+                if file_path.exists():
+                    file_path.unlink()
+                    logger.info(f"Cleaned up failed upload: {file_path}")
+            except Exception as cleanup_error:
+                logger.error(f"Failed to clean up file {file_path}: {cleanup_error}")
             raise HTTPException(status_code=400, detail=f"Failed to parse file: {str(e)}")
 
         logger.info(f"Successfully parsed {file.filename}: {result['unique_urls']} unique URLs found")
@@ -239,7 +260,7 @@ async def create_task(task_data: TaskCreate, db: Session = Depends(get_db)):
 async def list_tasks(
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(20, ge=1, le=100, description="Maximum number of records to return"),
-    status: Optional[str] = Query(None, regex="^(active|paused|deleted)$", description="Filter by status"),
+    status: Optional[str] = Query(None, pattern="^(active|paused|deleted)$", description="Filter by status"),
     db: Session = Depends(get_db)
 ):
     """
@@ -374,7 +395,7 @@ async def update_task(
             task.crawl_config = task_data.crawl_config
 
         # Update timestamp
-        task.updated_at = datetime.now()
+        task.updated_at = datetime.now(timezone.utc)
 
         db.commit()
         db.refresh(task)
@@ -483,7 +504,7 @@ async def update_task_status(
 
         # Update status
         task.status = new_status
-        task.updated_at = datetime.now()
+        task.updated_at = datetime.now(timezone.utc)
 
         db.commit()
         db.refresh(task)
@@ -498,8 +519,8 @@ async def update_task_status(
                     # Unschedule
                     await unschedule_task(task_id, scheduler)
                     logger.info(f"Unscheduled paused task {task_id}")
-                elif new_status in ['active', 'completed'] and old_status == 'paused':
-                    # Reschedule
+                elif new_status == 'active' and old_status == 'paused':
+                    # Reschedule when activating a paused task
                     await schedule_task(task, scheduler)
                     logger.info(f"Scheduled task {task_id}")
             except Exception as e:
@@ -546,8 +567,15 @@ async def execute_task_manual(task_id: int, db: Session = Depends(get_db)):
                 detail=f"Task {task_id} is not active (status: {task.status})"
             )
 
-        # Execute in background
-        asyncio.create_task(execute_task(task_id))
+        # Execute in background with error handling
+        async def execute_with_error_handling(tid: int):
+            """Execute task with error handling to prevent silent failures"""
+            try:
+                await execute_task(tid)
+            except Exception as e:
+                logger.error(f"Background task execution failed for task {tid}: {e}", exc_info=True)
+
+        asyncio.create_task(execute_with_error_handling(task_id))
 
         logger.info(f"Started manual execution of task {task_id}")
 
@@ -617,7 +645,7 @@ async def get_task_executions(
 @router.get("/{task_id}/export")
 async def export_task_articles(
     task_id: int,
-    format: str = Query("excel", regex="^(excel|csv|json)$", description="Export format"),
+    format: str = Query("excel", pattern="^(excel|csv|json)$", description="Export format"),
     start_date: Optional[datetime] = Query(None, description="Filter by start date"),
     end_date: Optional[datetime] = Query(None, description="Filter by end date"),
     db: Session = Depends(get_db)
@@ -675,7 +703,7 @@ async def export_task_articles(
             'json': 'json'
         }
 
-        filename = f"task_{task_id}_articles_{datetime.now().strftime('%Y%m%d_%H%M%S')}.{extensions[format]}"
+        filename = f"task_{task_id}_articles_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.{extensions[format]}"
 
         logger.info(f"Exporting task {task_id} articles as {format}")
 
