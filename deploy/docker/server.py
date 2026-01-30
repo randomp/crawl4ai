@@ -65,9 +65,15 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 from prometheus_fastapi_instrumentator import Instrumentator
 from redis import asyncio as aioredis
+from fastapi.middleware.cors import CORSMiddleware
 
 # ── internal imports (after sys.path append) ─────────────────
 sys.path.append(os.path.dirname(os.path.realpath(__file__)))
+
+# ── task management imports ──────────────────────────────────
+from tasks.router import router as task_router
+from tasks.models import Base, get_engine
+from tasks.scheduler import create_scheduler, start_scheduler, stop_scheduler
 
 # ────────────────── configuration / logging ──────────────────
 config = load_config()
@@ -82,6 +88,12 @@ GLOBAL_SEM = asyncio.Semaphore(MAX_PAGES)
 # ── security feature flags ───────────────────────────────────
 # Hooks are disabled by default for security (RCE risk). Set to "true" to enable.
 HOOKS_ENABLED = os.environ.get("CRAWL4AI_HOOKS_ENABLED", "false").lower() == "true"
+
+# ── database configuration ────────────────────────────────────
+DATABASE_URL = os.environ.get(
+    "DATABASE_URL",
+    "postgresql://crawl4ai:crawl4ai@localhost:5432/crawl4ai"
+)
 
 # ── default browser config helper ─────────────────────────────
 def get_default_browser_config() -> BrowserConfig:
@@ -131,6 +143,21 @@ async def lifespan(_: FastAPI):
         **config["crawler"]["browser"].get("kwargs", {}),
     ))
 
+    # Initialize database for task management
+    logger.info(f"Initializing database: {DATABASE_URL}")
+    engine = get_engine(DATABASE_URL)
+    Base.metadata.create_all(bind=engine)
+    logger.info("Database tables created successfully")
+
+    # Initialize and start task scheduler
+    logger.info("Starting task scheduler...")
+    app.state.scheduler = create_scheduler(
+        database_url=DATABASE_URL,
+        timezone=os.environ.get("SCHEDULER_TIMEZONE", "Asia/Shanghai")
+    )
+    await start_scheduler(app.state.scheduler)
+    logger.info("Task scheduler started successfully")
+
     # Start background tasks
     app.state.janitor = asyncio.create_task(janitor())
     app.state.timeline_updater = asyncio.create_task(_timeline_updater())
@@ -140,6 +167,14 @@ async def lifespan(_: FastAPI):
     # Cleanup
     app.state.janitor.cancel()
     app.state.timeline_updater.cancel()
+
+    # Stop task scheduler
+    logger.info("Stopping task scheduler...")
+    try:
+        await stop_scheduler(app.state.scheduler)
+        logger.info("Task scheduler stopped successfully")
+    except Exception as e:
+        logger.error(f"Scheduler cleanup failed: {e}")
 
     # Monitor cleanup (persist stats and stop workers)
     from monitor import get_monitor
@@ -167,6 +202,15 @@ app = FastAPI(
     title=config["app"]["title"],
     version=config["app"]["version"],
     lifespan=lifespan,
+)
+
+# ── CORS middleware for frontend ──────────────────────────────
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=os.environ.get("CORS_ORIGINS", "*").split(","),
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # ── static playground ──────────────────────────────────────
@@ -297,6 +341,9 @@ app.include_router(init_job_router(redis, config, token_dep))
 # ── monitor router ──────────────────────────────────────────
 from monitor_routes import router as monitor_router
 app.include_router(monitor_router)
+
+# ── task management router ──────────────────────────────────
+app.include_router(task_router, prefix="/api")
 
 logger = logging.getLogger(__name__)
 
