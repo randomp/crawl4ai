@@ -64,18 +64,23 @@ A production-ready task management system for automated crawling of WeChat publi
 
 ## 📁 File Structure
 
-### Backend Implementation
+### Backend Implementation (Refactored Structure)
 
 ```
-wechat_console/
-├── __init__.py              (14 lines)   - Module initialization
-├── models.py                (223 lines)  - Database models
-├── file_parser.py           (159 lines)  - Excel/CSV parser
-├── wechat_scraper.py        (312 lines)  - Two-phase crawler
-├── scheduler.py             (444 lines)  - Task scheduling
-├── exporter.py              (199 lines)  - Data export
-└── router.py                (722 lines)  - REST API endpoints
+wechat_console/               # ✓ Root-level application package
+├── __init__.py              (14 lines)   - Package initialization & exports
+├── main.py                  (106 lines)  - Standalone entry point
+├── README.md                (129 lines)  - Package documentation
+├── models.py                (223 lines)  - Database models (Task, Article, TaskExecution)
+├── file_parser.py           (159 lines)  - Excel/CSV parser with security
+├── wechat_scraper.py        (312 lines)  - Two-phase article crawler
+├── scheduler.py             (444 lines)  - APScheduler integration
+├── exporter.py              (199 lines)  - Multi-format data export
+└── router.py                (722 lines)  - FastAPI REST API endpoints
 ```
+
+**Note:** The backend was refactored from `deploy/docker/tasks/` to `wechat_console/`
+to follow Python best practices. See [Refactoring Notes](REFACTORING_NOTES.md) for details.
 
 **Total Backend**: 2,067 lines (excluding server.py integration)
 
