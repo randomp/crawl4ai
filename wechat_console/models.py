@@ -80,7 +80,7 @@ class Article(Base):
     author = Column(String(255), nullable=True)
     publish_time = Column(DateTime, nullable=True)
     content = Column(Text, nullable=True)
-    metadata = Column(JSON, nullable=True)
+    article_metadata = Column(JSON, nullable=True)  # Renamed from 'metadata' (SQLAlchemy reserved word)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     crawled_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
