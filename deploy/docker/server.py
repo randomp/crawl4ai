@@ -71,9 +71,9 @@ from fastapi.middleware.cors import CORSMiddleware
 sys.path.append(os.path.dirname(os.path.realpath(__file__)))
 
 # ── task management imports ──────────────────────────────────
-from tasks.router import router as task_router
-from tasks.models import Base, get_engine
-from tasks.scheduler import create_scheduler, start_scheduler, stop_scheduler
+from wechat_console.router import router as task_router
+from wechat_console.models import Base, get_engine
+from wechat_console.scheduler import create_scheduler, start_scheduler, stop_scheduler
 
 # ────────────────── configuration / logging ──────────────────
 config = load_config()

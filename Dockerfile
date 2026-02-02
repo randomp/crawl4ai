@@ -175,6 +175,9 @@ RUN mkdir -p /home/appuser/.cache \
 # Copy application code
 COPY deploy/docker/* ${APP_HOME}/
 
+# Copy WeChat console application
+COPY wechat_console ${APP_HOME}/wechat_console
+
 # copy the playground + any future static assets
 COPY deploy/docker/static ${APP_HOME}/static
 

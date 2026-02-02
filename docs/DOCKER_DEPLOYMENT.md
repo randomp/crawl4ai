@@ -291,7 +291,7 @@ docker compose restart crawl4ai
 ```bash
 # Test database connection
 docker compose exec crawl4ai python -c "
-from tasks.models import get_engine
+from wechat_console.models import get_engine
 engine = get_engine('postgresql://crawl4ai:changeme@postgres:5432/crawl4ai')
 print('Connected successfully!')
 "

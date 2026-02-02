@@ -5,6 +5,7 @@
 !crawl4ai/
 !docs/
 !deploy/docker/
+!wechat_console/
 !setup.py
 !pyproject.toml
 !README.md

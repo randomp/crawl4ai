@@ -21,7 +21,15 @@
       "Bash(curl:*)",
       "Bash(docker compose:*)",
       "Bash(./test-final-integration.sh:*)",
-      "Bash(mv:*)"
+      "Bash(mv:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git show:*)",
+      "Bash(ls:*)",
+      "Bash(git config:*)",
+      "Bash(wc:*)",
+      "Bash(npm install:*)",
+      "Bash(npm run build:*)"
     ]
   },
   "enableAllProjectMcpServers": false

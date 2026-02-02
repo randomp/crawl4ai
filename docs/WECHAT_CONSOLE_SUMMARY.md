@@ -67,8 +67,8 @@ A production-ready task management system for automated crawling of WeChat publi
 ### Backend Implementation
 
 ```
-deploy/docker/tasks/
-├── __init__.py              (8 lines)    - Module initialization
+wechat_console/
+├── __init__.py              (14 lines)   - Module initialization
 ├── models.py                (223 lines)  - Database models
 ├── file_parser.py           (159 lines)  - Excel/CSV parser
 ├── wechat_scraper.py        (312 lines)  - Two-phase crawler

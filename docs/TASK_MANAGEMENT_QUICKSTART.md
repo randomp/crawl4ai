@@ -447,7 +447,7 @@ curl -X POST http://localhost:11235/api/tasks/1/execute
 ## 📦 File Structure
 
 ```
-deploy/docker/tasks/
+wechat_console/
 ├── __init__.py           # Module initialization
 ├── models.py             # Database models (Task, Article, TaskExecution)
 ├── file_parser.py        # Excel/CSV parser
