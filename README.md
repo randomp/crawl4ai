@@ -357,6 +357,136 @@ For more examples, see our [Docker Examples](https://github.com/unclecode/crawl4
 
 ---
 
+## 🕷️ WeChat Article Crawler Console
+
+<details>
+  <summary>📱 Automated WeChat Public Account Article Crawler with Web UI</summary>
+
+A production-ready task management system for automated crawling of WeChat public account articles with incremental updates, scheduling, and data export.
+
+### Features
+
+- **Task Management**: Create, edit, pause/resume, and delete crawl tasks
+- **File Upload**: Import Excel/CSV files containing WeChat public account URLs
+- **Smart Scheduling**: Support for one-time, interval, and cron-based scheduling
+- **Incremental Crawling**: Three-layer deduplication (URL, time-based, content hash)
+- **Execution History**: Track all crawl executions with detailed statistics
+- **Data Export**: Export articles in Excel, CSV, or JSON format
+- **Real-time Monitoring**: Live statistics and execution status updates
+- **Modern UI**: React + TypeScript frontend with Ant Design
+
+### Architecture
+
+- **Backend**: FastAPI + PostgreSQL + APScheduler
+- **Frontend**: React 18 + TypeScript + Vite + Ant Design
+- **Crawler**: Crawl4AI AsyncWebCrawler with two-phase scraping
+- **Scheduler**: APScheduler with database-backed job store
+- **Database**: PostgreSQL with SQLAlchemy ORM
+
+### Quick Start
+
+#### 1. Start with Docker Compose (Recommended)
+
+```bash
+# Clone repository
+git clone https://github.com/unclecode/crawl4ai.git
+cd crawl4ai
+
+# Configure environment
+cp .env.example .env
+nano .env  # Set database password and configuration
+
+# Start all services (backend + database)
+docker compose up -d
+
+# Check services
+docker compose ps
+curl http://localhost:11235/health
+```
+
+#### 2. Access the API
+
+```bash
+# Create a task
+curl -X POST http://localhost:11235/api/tasks \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Tech News Crawler",
+    "wechat_urls": ["https://mp.weixin.qq.com/..."],
+    "schedule_type": "interval",
+    "schedule_config": {"hours": 6}
+  }'
+
+# List tasks
+curl http://localhost:11235/api/tasks
+
+# Execute task immediately
+curl -X POST http://localhost:11235/api/tasks/1/execute
+```
+
+#### 3. Build and Deploy Frontend (Optional)
+
+```bash
+cd frontend
+
+# Install and build
+npm install
+npm run build
+
+# Enable frontend in docker-compose.yml (uncomment lines 92-109)
+# Restart services
+cd ..
+docker compose up -d
+
+# Access frontend
+open http://localhost:8080
+```
+
+### Documentation
+
+- **Quick Start**: See [Task Management Quickstart](docs/TASK_MANAGEMENT_QUICKSTART.md) for API reference
+- **Docker Deployment**: See [Docker Deployment Guide](docs/DOCKER_DEPLOYMENT.md) for production setup
+- **Frontend**: See [Frontend README](frontend/README.md) for development guide
+
+### API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/tasks` | GET | List all tasks |
+| `/api/tasks` | POST | Create new task |
+| `/api/tasks/{id}` | GET | Get task details |
+| `/api/tasks/{id}` | PUT | Update task |
+| `/api/tasks/{id}` | DELETE | Delete task |
+| `/api/tasks/{id}/status` | PATCH | Update task status |
+| `/api/tasks/{id}/execute` | POST | Execute task immediately |
+| `/api/tasks/{id}/executions` | GET | Get execution history |
+| `/api/tasks/{id}/export` | GET | Export articles |
+| `/api/tasks/upload` | POST | Upload Excel/CSV file |
+
+### Screenshots
+
+**Task List Dashboard**
+- Overview of all crawl tasks
+- Real-time statistics (total tasks, active tasks, total executions)
+- Quick actions (pause, resume, execute, delete)
+
+**Task Creation Wizard**
+- 3-step wizard (basic info, URL upload, schedule configuration)
+- Excel/CSV file upload with URL preview
+- Flexible scheduling (once, interval, cron)
+
+**Task Detail & History**
+- Task overview and configuration
+- Execution history with status tracking
+- Performance metrics and success rate
+- Data export in multiple formats
+
+For more details, see the [full documentation](docs/TASK_MANAGEMENT_QUICKSTART.md).
+
+</details>
+
+---
+
 ## 🔬 Advanced Usage Examples 🔬
 
 You can check the project structure in the directory [docs/examples](https://github.com/unclecode/crawl4ai/tree/main/docs/examples). Over there, you can find a variety of examples; here, some popular examples are shared.

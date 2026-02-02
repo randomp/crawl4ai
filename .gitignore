@@ -286,6 +286,10 @@ docs/apps/linkdin/samples/insights/*
 
 scripts/
 !scripts/gen-sbom.sh
+!scripts/README.md
+!scripts/start-wechat-console.sh
+!scripts/stop-wechat-console.sh
+!scripts/test-wechat-console.sh
 
 
 # Databse files
